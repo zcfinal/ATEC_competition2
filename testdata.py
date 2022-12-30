@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from collections import Counter
 from sklearn.preprocessing import KBinsDiscretizer
-
 def train_feat_process(path_buyer_features, path_edge_features, path_train_label): # 开放给用户
 	
 	"""
@@ -22,15 +21,27 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		if is_first_line:
 			is_first_line = False
 			continue
-		parts = line.rstrip().split(" ")
-		buyer_id = int(parts[0])
-        gender = int(parts[1])
-        age = int(parts[2])
-		city = int(parts[3])
-        occupation = int(parts[4])
+		parts = line.split(" ")
+        buyer_id = int(parts[0])
+        if len(parts)==5:
+            gender = int(parts[1])
+            age = int(parts[2])
+            city = int(parts[3])
+            occupation = int(parts[4])
+        else:
+            gender = ' '
+            age = ' '
+            city = ' '
+            occupation = ' '
         
         for i in range(5):
-            buyer_feat_set[i].add(int(parts[i]))
+            if len(parts)==5:
+                buyer_feat_set[i].add(int(parts[i]))
+            else:
+                if i==0:
+                    buyer_feat_set[i].add(int(parts[i]))
+                else:
+                    buyer_feat_set[i].add(' ')
 		
 		buyer_feats[buyer_id] = {'gender':gender,'age':age,'city': city,'occupation':occupation}
 
@@ -38,10 +49,10 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
         feat_set = buyer_feat_set[i]
         buyer_feat_set[i] = {feat:j+1 for j,feat in enumerate(feat_set)}
 
-    user_feat_batch
-    for buyer_id, user_dict in buyer_feats:
+    user_feat_batch = {}
+    for buyer_id, user_dict in buyer_feats.items():
         user_feature = []
-        for key,value in user_dict:
+        for key,value in user_dict.items():
             user_feature.append(buyer_feat_set[user_column[key]][value])
         user_feat_batch[buyer_feat_set[user_column['buyer_id']][buyer_id]] = user_feature
 
@@ -169,7 +180,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
             user.append(record['buyer_id'])
         user_count = Counter(user)
         user_most = user_count.most_common(user_num)
-        user = [uid[0] for uid in user_most]
+        user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
         user = user + [0]*(user_num-len(user))
         feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
@@ -191,11 +202,10 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	return ret_dict
 
 
-
 def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_label):  # 开放给用户
 	# 训练集和测试集样本特征结构一致，使用s_path_buyer_features和s_path_edge_features中的数据提取特征
 	# 我们的示例是简化版：直接获取的训练集预处理特征提前的特征
-	ret_dict = train_feat_process(c_path_buyer_features, c_path_edge_features, c_path_train_label)
+	ret_dict = train_feat_process(s_path_buyer_features, s_path_edge_features, s_path_train_label)
     feat_interval_time=ret_dict['feat_interval_time']
     feat_trade_num=ret_dict['feat_trade_num']
     feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
@@ -211,6 +221,11 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 	valid_feat_trade_num = []
 	valid_feat_avg_trade_amount = []
 	valid_feat_return_num = []
+
+    user_feature_matrix = np.zeros((len(user_feat_batch)+1,len(user_feat_batch[1])), dtype=np.int32)
+    for uid,feature in user_feat_batch.items():
+        user_feature_matrix[uid]=np.array(feature)
+
 
 	is_first_line = True
 	for line in open(s_path_train_label):
@@ -228,9 +243,11 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 
         user_num = 20
         if seller_id in feat_user:
-			valid_feat_user.append(feat_user[seller_id])
+			valid_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:
-			valid_feat_user.append([0]*user_num)
+			valid_feat_user.append(user_feature_matrix[[0]*user_num])
+        
+
 
 		if seller_id in feat_interval_time:
 			valid_feat_interval_time.append(feat_interval_time[seller_id])
@@ -252,12 +269,15 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 		else:
 			valid_feat_return_num.append(10)
 
-	valid_feats = [
+    valid_feats = [
 		np.array(valid_feat_interval_time)
 		, np.array(valid_feat_trade_num)
 		, np.array(valid_feat_avg_trade_amount)
 		, np.array(valid_feat_return_num)
+        , np.array(valid_feat_user_num)
+        , np.array(valid_feat_user)
 	]
+
 	return valid_feats
 
 
