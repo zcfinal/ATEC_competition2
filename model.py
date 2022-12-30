@@ -3,6 +3,9 @@ import numpy as np
 import torch.nn.functional as F
 from torch import nn
 
+import warnings
+warnings.filterwarnings("ignore")
+
 class ScaledDotProductAttention(nn.Module):
     def __init__(self, d_k):
         super(ScaledDotProductAttention, self).__init__()

@@ -1,6 +1,9 @@
 import wandb
 import copy
 
+import warnings
+warnings.filterwarnings("ignore")
+
 class My_ClassificationAggregator():
 	def get_model_params(self):
 		if self.cpu_transfer:

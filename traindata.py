@@ -12,30 +12,32 @@ import numpy as np
 import wget
 import zipfile
 import logging
+import warnings
+warnings.filterwarnings("ignore")
 
 # training samples
 def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_label):
 	ret_dict = train_feat_process(c_path_buyer_features, c_path_edge_features, c_path_train_label)
-    feat_interval_time=ret_dict['feat_interval_time']
-    feat_trade_num=ret_dict['feat_trade_num']
-    feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
-    feat_return_num =ret_dict['feat_return_num']
-    feat_user_num=ret_dict['feat_user_num']
-    feat_user=ret_dict['feat_user']
-    user_feat_batch=ret_dict['user_feat_batch']
-	
-    c_path_train_label = c_path_train_label
-    train_feat_user_num = []
-    train_feat_user = []
+	feat_interval_time=ret_dict['feat_interval_time']
+	feat_trade_num=ret_dict['feat_trade_num']
+	feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
+	feat_return_num =ret_dict['feat_return_num']
+	feat_user_num=ret_dict['feat_user_num']
+	feat_user=ret_dict['feat_user']
+	user_feat_batch=ret_dict['user_feat_batch']
+
+	c_path_train_label = c_path_train_label
+	train_feat_user_num = []
+	train_feat_user = []
 	train_feat_interval_time = []
 	train_feat_trade_num = []
 	train_feat_avg_trade_amount = []
 	train_feat_return_num = []
 	train_labels = []
 
-    user_feature_matrix = np.zeros((len(user_feat_batch)+1,len(user_feat_batch[1])), dtype=np.int32)
-    for uid,feature in user_feat_batch.items():
-        user_feature_matrix[uid]=np.array(feature)
+	user_feature_matrix = np.zeros((len(user_feat_batch)+1,len(user_feat_batch[1])), dtype=np.int32)
+	for uid,feature in user_feat_batch.items():
+		user_feature_matrix[uid]=np.array(feature)
 
 	is_first_line = True
 	for line in open(c_path_train_label):
@@ -53,18 +55,18 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 
 		train_labels.append(label)
 
-        if seller_id in feat_user_num:
+		if seller_id in feat_user_num:
 			train_feat_user_num.append(feat_user_num[seller_id])
 		else:
 			train_feat_user_num.append(10)
 
-        user_num = 20
-        if seller_id in feat_user:
+		user_num = 20
+		if seller_id in feat_user:
 			train_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:
 			train_feat_user.append(user_feature_matrix[[0]*user_num])
 
-        if seller_id in feat_interval_time:
+		if seller_id in feat_interval_time:
 			train_feat_interval_time.append(feat_interval_time[seller_id])
 		else:
 			train_feat_interval_time.append(np.zeros([10], dtype=np.float32))
@@ -92,9 +94,9 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 		, np.array(train_feat_trade_num)[indices]
 		, np.array(train_feat_avg_trade_amount)[indices]
 		, np.array(train_feat_return_num)[indices]
-        , np.array(train_feat_user_num)[indices]
-        , np.array(train_feat_user)[indices]
-        ]
+		, np.array(train_feat_user_num)[indices]
+		, np.array(train_feat_user)[indices]
+		]
 	train_labels = np.array(train_labels)[indices]
 	train_data = []
 	train_data.append(train_feats)
@@ -108,12 +110,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	"""
 	process trade buyer features
 	"""
-    user_column = {'buyer_id':0,
-                    'gender':1,
-                    'age':2,
-                    'city':3,
-                    'occupation':4}
-    buyer_feat_set = {i:set() for i in range(5)}
+	user_column = {'buyer_id':0,
+					'gender':1,
+					'age':2,
+					'city':3,
+					'occupation':4}
+	buyer_feat_set = {i:set() for i in range(5)}
 	buyer_feats = {}
 	is_first_line = True
 	for line in open(path_buyer_features):
@@ -121,39 +123,45 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 			is_first_line = False
 			continue
 		parts = line.split(" ")
-        buyer_id = int(parts[0])
-        if len(parts)==5:
-            gender = int(parts[1])
-            age = int(parts[2])
-            city = int(parts[3])
-            occupation = int(parts[4])
-        else:
-            gender = ' '
-            age = ' '
-            city = ' '
-            occupation = ' '
-        
-        for i in range(5):
-            if len(parts)==5:
-                buyer_feat_set[i].add(int(parts[i]))
-            else:
-                if i==0:
-                    buyer_feat_set[i].add(int(parts[i]))
-                else:
-                    buyer_feat_set[i].add(' ')
+		buyer_id = int(parts[0])
+		if len(parts)==5:
+			gender = int(parts[1])
+			age = int(parts[2])
+			city = int(parts[3])
+			occupation = int(parts[4])
+		else:
+			gender = ' '
+			age = ' '
+			city = ' '
+			occupation = ' '
+		
+		for i in range(5):
+			if len(parts)==5:
+				buyer_feat_set[i].add(int(parts[i]))
+			else:
+				if i==0:
+					buyer_feat_set[i].add(int(parts[i]))
+				else:
+					buyer_feat_set[i].add(' ')
 		
 		buyer_feats[buyer_id] = {'gender':gender,'age':age,'city': city,'occupation':occupation}
 
-    for i in range(5):
-        feat_set = buyer_feat_set[i]
-        buyer_feat_set[i] = {feat:j+1 for j,feat in enumerate(feat_set)}
+	for i in range(5):
+		def lamb(x):
+			if x==' ':
+				return -10000
+			else:
+				return x
+		feat_set = list(buyer_feat_set[i])
+		feat_set = sorted(feat_set,key=lamb)
+		buyer_feat_set[i] = {feat:j+1 for j,feat in enumerate(feat_set)}
 
-    user_feat_batch = {}
-    for buyer_id, user_dict in buyer_feats.items():
-        user_feature = []
-        for key,value in user_dict.items():
-            user_feature.append(buyer_feat_set[user_column[key]][value])
-        user_feat_batch[buyer_feat_set[user_column['buyer_id']][buyer_id]] = user_feature
+	user_feat_batch = {}
+	for buyer_id, user_dict in buyer_feats.items():
+		user_feature = []
+		for key,value in user_dict.items():
+			user_feature.append(buyer_feat_set[user_column[key]][value])
+		user_feat_batch[buyer_feat_set[user_column['buyer_id']][buyer_id]] = user_feature
 
 	"""
 	process trade edge features
@@ -165,7 +173,6 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		if is_first_line:
 			is_first_line = False
 			continue
-
 		parts = line.rstrip().split(" ")
 		partition = int(parts[0])
 		buyer_id = int(parts[1])
@@ -268,36 +275,42 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		bin_res = bin_est.transform([[val]])[0][0]
 		feat_return_num[seller_id] = bin_res
 
-    #user
+	#user
 
-    feat_user = {}
-    feat_user_num = {}
-    user_num = 20
+	feat_user = {}
+	feat_user_num = {}
+	user_num = 20
 	for seller_id, trade_datas in trade_records.items():
-        user = []
-        for record in trade_datas:
-            user.append(record['buyer_id'])
-        user_count = Counter(user)
-        user_most = user_count.most_common(user_num)
-        user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
-        user = user + [0]*(user_num-len(user))
-        feat_user_num[seller_id] = len(user_count)
+		user = []
+		for record in trade_datas:
+			user.append(record['buyer_id'])
+		user_count = Counter(user)
+		user_most = user_count.most_common(user_num)
+		user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
+		user = user + [0]*(user_num-len(user))
+		feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
 
 	bin_est = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='quantile')
 	bin_est.fit(np.reshape(list(feat_user_num.values()), [-1,1]))
 	for seller_id, val in feat_user_num.items():
 		feat_user_num[seller_id] = bin_est.transform([[val]])[0][0]
-    
-    ret_dict = {'feat_interval_time':feat_interval_time,
-                'feat_trade_num':feat_trade_num,
-                'feat_avg_trade_amount':feat_avg_trade_amount,
-                'feat_return_num':feat_return_num,
-                'feat_user_num':feat_user_num,
-                'feat_user':feat_user,
-                'user_feat_batch':user_feat_batch
-                }
+
+	ret_dict = {'feat_interval_time':feat_interval_time,
+				'feat_trade_num':feat_trade_num,
+				'feat_avg_trade_amount':feat_avg_trade_amount,
+				'feat_return_num':feat_return_num,
+				'feat_user_num':feat_user_num,
+				'feat_user':feat_user,
+				'user_feat_batch':user_feat_batch
+				}
 
 	return ret_dict
 
-#if __name__=="__main__":
+if __name__=="__main__":
+	buyer_path='./data/buyer.txt'
+	edge_path='./data/edge.txt'
+	label_path='./data/label.txt'
+	gen_train_data(buyer_path,edge_path,label_path)
+
+	

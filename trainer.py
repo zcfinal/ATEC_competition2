@@ -4,6 +4,9 @@ from torch import nn
 import logging
 import numpy as np
 import torch.nn.functional as F
+
+import warnings
+warnings.filterwarnings("ignore")
 import copy
 def calc_auc(preds, labels): 
 	return roc_auc_score(labels, preds)
