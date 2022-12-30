@@ -92,14 +92,20 @@ class AttentionPooling(nn.Module):
         return x
 
 class User_Model(nn.Module):
-    def __init__(self):
+    def __init__(self,hidden_size):
 		super(User_Model, self).__init__()
+        self.hidden_size = hidden_size
 		self.build_model()
     
     def build_model(self):
-        self.embeddings = nn.ModuleList([nn.Embedding(350,8) for i in range(4)])
-        self.user_attention = AttentionPooling(8,8,0.5)
-        self.shop_attention = AttentionPooling(8,8,0.5)
+        self.embeddings = nn.ModuleList([nn.Embedding(10,self.hidden_size),
+                                        nn.Embedding(15,self.hidden_size),
+                                        nn.Embedding(330,self.hidden_size),
+                                        nn.Embedding(15,self.hidden_size),
+                                        nn.Embedding(11,self.hidden_size)])
+        self.position_embedding = nn.Embedding(50,self.hidden_size)
+        self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
+        self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self,feats):
@@ -108,12 +114,13 @@ class User_Model(nn.Module):
         feats = torch.tensor(feats, dtype=torch.int64)
         feats = feats.view(-1,f_num)
         feats_embedding = []
-        for i in range(4):
+        for i in range(5):
             feats_embedding.append(self.dropout(self.embeddings[i](feats[:,i])))
         feats_embedding = torch.stack(feats_embedding,1)
         #[batch*user_num,dim]
         feats_embedding = self.user_attention(feats_embedding)
         feats_embedding = feats_embedding.view(batch_size,user_num,-1)
+        feats_embedding = feats_embedding + self.dropout(self.position_embedding(torch.tensor([i for i in range(user_num)], dtype=torch.int64).expand(batch_size,user_num)))
         feats_embedding = self.shop_attention(feats_embedding)
 
         return feats_embedding
@@ -122,14 +129,14 @@ class User_Model(nn.Module):
         
 
 class Net(nn.Module):
-	def __init__(self, hidden_size=8, num_layers=2, lr=0.001):
+	def __init__(self, hidden_size=16, num_layers=2, lr=0.001):
 		super(Net, self).__init__()
 		self.hidden_size = hidden_size
 		self.num_layers = num_layers
 		self.build_model()
 
 	def build_model(self):
-        self.user_model = User_Model()
+        self.user_model = User_Model(self.hidden_size)
         self.embeddings = nn.ModuleList([nn.Embedding(11,self.hidden_size) for i in range(4)])
         self.dropout = nn.Dropout(0.2)
 		input_size = self.hidden_size*5+10

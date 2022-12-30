@@ -166,8 +166,10 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	"""
 	process trade edge features
 	"""
+	
 	seller_ids = set([])
 	trade_records = {}
+	user_records = {}
 	is_first_line = True
 	for line in open(path_edge_features):
 		if is_first_line:
@@ -196,6 +198,25 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 				'partition': partition
 				})
 		seller_ids.add(seller_id)
+
+		if buyer_id not in user_records:
+			user_records[buyer_id] = 1
+		else:
+			user_records[buyer_id] += 1
+	
+	feat_buy_num = {}
+	for buyer_id, buy_num in user_records.items():
+		feat_buy_num[buyer_feat_set[user_column['buyer_id']][buyer_id]] = buy_num
+	bin_est = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='quantile')
+	bin_est.fit(np.reshape(list(feat_buy_num.values()), [-1,1]))
+	for buyer_id, buy_num in feat_buy_num.items():
+		feat_buy_num[buyer_id] = bin_est.transform([[buy_num]])[0][0]
+	
+	for uid in user_feat_batch:
+		if uid in feat_buy_num:
+			user_feat_batch[uid].append(feat_buy_num[uid])
+		else:
+			user_feat_batch[uid].append(10)
 
 	# interval between the time of goods delivery and trade created time
 	feat_interval_time = {}

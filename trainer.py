@@ -103,3 +103,4 @@ class My_ClassificationTrainer():
 			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, self.prox_loss()))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
+			print('[Epoch {}] best: auc = {:.4f}'.format(epoch+1, auc_best))
