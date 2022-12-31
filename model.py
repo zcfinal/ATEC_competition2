@@ -148,11 +148,11 @@ class Net(nn.Module):
         self.dropout = nn.Dropout(0.2)
 		input_size = 4+self.bin_num+self.hidden_size
 		self.model = nn.Sequential(
-			nn.Linear(input_size,input_size//2),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(input_size//2,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
+			nn.Linear(input_size,input_size//2),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(input_size//2),
+            nn.Linear(input_size//2,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
 			nn.Linear(self.hidden_size,1)
 		)
 		self.sigmoid = torch.nn.Sigmoid()

@@ -15,7 +15,9 @@ class My_ClassificationAggregator():
 
 	def torch_aggregator(self, raw_grad_list, training_num):
 		(num0, avg_params) = raw_grad_list[0]# 取出server端
-		for k in avg_params.keys():      # 遍历server端的每一个参数
+		for k in avg_params.keys():   # 遍历server端的每一个参数
+			if 'num_batches_tracked' in k:
+				continue
 			for i in range(0, len(raw_grad_list)):   # 当server端参数固定后，遍历其它client端与server对应的参数
 				local_sample_number, local_model_params = raw_grad_list[i]
 				w = local_sample_number / training_num
