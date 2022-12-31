@@ -4,7 +4,7 @@ import pickle
 import sklearn
 import numpy as np
 from collections import Counter
-from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.preprocessing import KBinsDiscretizer, StandardScaler
 import torch
 import json
 import os
@@ -23,17 +23,19 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 	seller_feat_matrix=ret_dict['seller_feat_matrix']
 	feat_user=ret_dict['feat_user']
 	user_feat_batch=ret_dict['user_feat_batch']
+	seller_embedding_default=ret_dict['seller_embedding_default']
+	user_embedding_default=ret_dict['user_embedding_default']
 
 	c_path_train_label = c_path_train_label
 	train_feat_seller=[]
 	train_feat_user = []
 	train_feat_interval_time = []
 	train_labels = []
-	bin_num=20
+	bin_num=10
 	seller_feature_num = len(list(seller_feat_matrix.values())[0])
 
 	user_feature_matrix = np.zeros((len(user_feat_batch)+1,len(user_feat_batch[1])), dtype=np.int32)
-	user_feature_matrix[:,4:]=bin_num
+	user_feature_matrix[0] = np.array(user_embedding_default)
 	for uid,feature in user_feat_batch.items():
 		user_feature_matrix[uid]=np.array(feature)
 
@@ -68,7 +70,7 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 		if seller_id in seller_feat_matrix:
 			train_feat_seller.append(seller_feat_matrix[seller_id])
 		else:
-			train_feat_seller.append([bin_num]*seller_feature_num)
+			train_feat_seller.append(seller_embedding_default)
 
 
 	indices = np.arange(len(train_labels))
@@ -114,7 +116,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	"""
 	process trade buyer features
 	"""
-	bin_num=20
+	bin_num=10
 	user_column = {'buyer_id':0,
 					'gender':1,
 					'age':2,
@@ -123,6 +125,8 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	buyer_feat_set = {i:set() for i in range(5)}
 	buyer_feats = {}
 	is_first_line = True
+	user_embedding_default=[]
+	seller_embedding_default=[]
 	for line in open(path_buyer_features):
 		if is_first_line:
 			is_first_line = False
@@ -167,7 +171,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		for key,value in user_dict.items():
 			user_feature.append(buyer_feat_set[user_column[key]][value])
 		user_feat_batch[buyer_feat_set[user_column['buyer_id']][buyer_id]] = user_feature
-
+	user_embedding_default = [0]*4
 	"""
 	process trade edge features
 	"""
@@ -212,16 +216,17 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	feat_buy_num = {}
 	for buyer_id, buy_num in user_records.items():
 		feat_buy_num[buyer_feat_set[user_column['buyer_id']][buyer_id]] = buy_num
-	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est = StandardScaler()
 	bin_est.fit(np.reshape(list(feat_buy_num.values()), [-1,1]))
 	for buyer_id, buy_num in feat_buy_num.items():
 		feat_buy_num[buyer_id] = bin_est.transform([[buy_num]])[0][0]
-	
+	default_val = bin_est.transform([[0]])[0][0]
 	for uid in user_feat_batch:
 		if uid in feat_buy_num:
 			user_feat_batch[uid].append(feat_buy_num[uid])
 		else:
-			user_feat_batch[uid].append(bin_num)
+			user_feat_batch[uid].append(default_val)
+	user_embedding_default.append(default_val)
 
 	# interval between the time of goods delivery and trade created time
 	feat_interval_time = {}
@@ -254,10 +259,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	feat_trade_num = {}
 	for seller_id, trade_datas in trade_records.items():
 		feat_trade_num[seller_id] = len(trade_datas)
-	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est = StandardScaler()
 	bin_est.fit(np.reshape(list(feat_trade_num.values()), [-1,1]))
 	for seller_id, val in feat_trade_num.items():
 		feat_trade_num[seller_id] = bin_est.transform([[val]])[0][0]
+	default_val = bin_est.transform([[0]])[0][0]
+	seller_embedding_default.append(default_val)
 
 	# average trade amount
 	feat_trade_amount = {}
@@ -278,10 +285,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		feat_avg_trade_amount[seller_id] = avg_val
 		avg_trade_amount_vals.append([avg_val])
 
-	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est = StandardScaler()
 	bin_est.fit(avg_trade_amount_vals)
 	for seller_id, val in feat_avg_trade_amount.items():
 		feat_avg_trade_amount[seller_id] = bin_est.transform([[val]])[0][0]
+	default_val = bin_est.transform([[0]])[0][0]
+	seller_embedding_default.append(default_val)
 
 	# number of return
 	feat_return_num = {}
@@ -295,11 +304,14 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 
 	return_num_vals = np.array(list(feat_return_num.values()))
 	return_num_vals = np.reshape(return_num_vals, [-1,1])
-	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est = StandardScaler()
 	bin_est.fit(return_num_vals)
 	for seller_id, val in feat_return_num.items():
 		bin_res = bin_est.transform([[val]])[0][0]
 		feat_return_num[seller_id] = bin_res
+	
+	default_val = bin_est.transform([[0]])[0][0]
+	seller_embedding_default.append(default_val)
 
 	#user
 
@@ -317,10 +329,13 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
 
-	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est = StandardScaler()
 	bin_est.fit(np.reshape(list(feat_user_num.values()), [-1,1]))
 	for seller_id, val in feat_user_num.items():
 		feat_user_num[seller_id] = bin_est.transform([[val]])[0][0]
+	default_val = bin_est.transform([[0]])[0][0]
+	seller_embedding_default.append(default_val)
+	
 
 	# preprocess seller feature matrix
 	agg_feature = [feat_trade_num,
@@ -328,6 +343,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 				feat_return_num,
 				feat_user_num
 				]
+
 	seller_feat_matrix = {}
 	for s_id in seller_ids:
 		feat_vec = []
@@ -384,7 +400,9 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	ret_dict = {'feat_interval_time':feat_interval_time,
 				'user_feat_batch':user_feat_batch,
 				'seller_feat_matrix':seller_feat_matrix,
-				'feat_user':feat_user
+				'feat_user':feat_user,
+				'seller_embedding_default':seller_embedding_default,
+				'user_embedding_default':user_embedding_default
 				}
 
 	return ret_dict

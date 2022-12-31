@@ -45,12 +45,6 @@ class My_ClassificationTrainer():
 	def set_model_params(self, model_parameters):
 		self.model.load_state_dict(model_parameters)
 	
-	def prox_loss(self):
-		loss = 0
-		for key,para in self.start_state_dict.items():
-			loss += torch.sum((para.detach() - self.get_model_params()[key])**2)
-		return loss
-	
 	def train(self, train_data, device, args):
 		self.start_state_dict = copy.deepcopy(self.get_model_params())
 		model = self.model
@@ -86,7 +80,12 @@ class My_ClassificationTrainer():
 				logits, preds = model(feats)
 				#p.extend(preds.detach().numpy().reshape([-1]))
 				criterion = nn.BCEWithLogitsLoss()
-				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + 0.001*self.prox_loss()
+
+				prox_loss = 0
+				for key,para in self.start_state_dict.items():
+					prox_loss += torch.sum((para.detach() - self.get_model_params()[key])**2)
+
+				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + 0.001*prox_loss
 				loss.backward()
 				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
@@ -100,7 +99,7 @@ class My_ClassificationTrainer():
 				auc_best = auc
 				print('Saving model ...')
 				torch.save(model.state_dict(), '%s' % args.global_model_file_path)
-			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, self.prox_loss()))
+			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, prox_loss))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
 			print('[Epoch {}] best: auc = {:.4f}'.format(epoch+1, auc_best))
