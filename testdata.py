@@ -377,9 +377,9 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 			valid_feat_seller.append(seller_embedding_default)
 
 	valid_feats = [
-		np.array(valid_feat_interval_time)
-		, np.array(valid_feat_seller)
-		, np.array(valid_feat_user)
+		np.array(valid_feat_interval_time,dtype=np.float32)
+		, np.array(valid_feat_seller,dtype=np.float32)
+		, np.array(valid_feat_user,dtype=np.float32)
 	]
 
 	return valid_feats

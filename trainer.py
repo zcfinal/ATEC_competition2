@@ -4,6 +4,7 @@ from torch import nn
 import logging
 import numpy as np
 import torch.nn.functional as F
+#from sklearn.metrics import roc_auc_score
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -85,7 +86,7 @@ class My_ClassificationTrainer():
 				for key,para in self.start_state_dict.items():
 					prox_loss += torch.sum((para.detach() - self.get_model_params()[key])**2)
 
-				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + 0.001*prox_loss
+				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + 0.0001*prox_loss
 				loss.backward()
 				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
@@ -99,6 +100,7 @@ class My_ClassificationTrainer():
 				auc_best = auc
 				print('Saving model ...')
 				torch.save(model.state_dict(), '%s' % args.global_model_file_path)
+			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
 			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, prox_loss))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))

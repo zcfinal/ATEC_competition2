@@ -14,6 +14,11 @@ class My_ClassificationAggregator():
 		self.model.load_state_dict(model_parameters)
 
 	def torch_aggregator(self, raw_grad_list, training_num):
+		if hasattr(self,'aggregation_num'):
+			self.aggregation_num+=1
+		else:
+			self.aggregation_num=1
+		print(f'round:{self.aggregation_num}')
 		(num0, avg_params) = raw_grad_list[0]# 取出server端
 		for k in avg_params.keys():   # 遍历server端的每一个参数
 			if 'num_batches_tracked' in k:
@@ -28,5 +33,18 @@ class My_ClassificationAggregator():
 				
 				else:
 					avg_params[k] += local_model_params[k] * w
+
+		if hasattr(self,'val_score') and avg_params['val_score']>self.val_score:
+			self.val_score=avg_params['val_score']
+			self.best_model = avg_params
+		elif not hasattr(self,'val_score'):
+			self.val_score=avg_params['val_score']
+			self.best_model = avg_params
+
+		print(f'best val score:{self.val_score}')
+		if self.aggregation_num==3:
+			print('load best')
+			self.set_model_params(self.best_model)
+			return self.best_model
 
 		return avg_params

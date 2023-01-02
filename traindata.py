@@ -77,9 +77,9 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 	indices = np.random.permutation(indices)
 
 	train_feats = [
-		np.array(train_feat_interval_time)[indices]
-		, np.array(train_feat_seller)[indices]
-		, np.array(train_feat_user)[indices]
+		np.array(train_feat_interval_time, dtype=np.float32)[indices]
+		, np.array(train_feat_seller, dtype=np.float32)[indices]
+		, np.array(train_feat_user, dtype=np.float32)[indices]
 		]
 		
 	train_labels = np.array(train_labels)[indices]
