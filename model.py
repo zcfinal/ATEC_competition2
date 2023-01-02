@@ -93,39 +93,33 @@ class AttentionPooling(nn.Module):
 
 class User_Model(nn.Module):
     def __init__(self,hidden_size,bin_num):
-		super(User_Model, self).__init__()
+        super(User_Model, self).__init__()
         self.hidden_size = hidden_size
         self.bin_num = bin_num
-		self.build_model()
+        self.build_model()
     
     def build_model(self):
         self.embeddings = nn.ModuleList([nn.Embedding(10,self.hidden_size),
                                         nn.Embedding(15,self.hidden_size),
                                         nn.Embedding(330,self.hidden_size),
                                         nn.Embedding(15,self.hidden_size),
-                                        ])
-        self.trans = nn.Sequential(
-            nn.Linear(4*self.hidden_size+1,self.hidden_size),
-            nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),
-        )
+                                        nn.Embedding(self.bin_num+1,self.hidden_size)])
         self.position_embedding = nn.Embedding(50,self.hidden_size)
-        #self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
+        self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self,feats):
         #feats : [batch,user_num,4]
         batch_size, user_num, f_num = feats.shape
-        feats = torch.tensor(feats)
-        
+        feats = torch.tensor(feats, dtype=torch.int64)
         feats = feats.view(-1,f_num)
         feats_embedding = []
-        for i in range(4):
-            feats_embedding.append(self.dropout(self.embeddings[i](feats[:,i].long())))
-        feats_embedding = torch.cat([torch.cat(feats_embedding,1),feats[:,4:]],1)
+        for i in range(5):
+            feats_embedding.append(self.dropout(self.embeddings[i](feats[:,i])))
+        feats_embedding = torch.stack(feats_embedding,1)
         #[batch*user_num,dim]
-        feats_embedding = self.trans(feats_embedding)
+        feats_embedding = self.user_attention(feats_embedding)
         feats_embedding = feats_embedding.view(batch_size,user_num,-1)
         feats_embedding = feats_embedding + self.dropout(self.position_embedding(torch.tensor([i for i in range(user_num)], dtype=torch.int64).expand(batch_size,user_num)))
         feats_embedding = self.shop_attention(feats_embedding)
@@ -136,34 +130,41 @@ class User_Model(nn.Module):
         
 
 class Net(nn.Module):
-	def __init__(self, hidden_size=16, num_layers=2, lr=0.001):
-		super(Net, self).__init__()
-		self.hidden_size = hidden_size
-		self.num_layers = num_layers
+    def __init__(self, hidden_size=16, num_layers=2, lr=0.001):
+        super(Net, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
         self.bin_num=10
-		self.build_model()
+        self.val_score=torch.nn.Parameter(torch.tensor(0,dtype=torch.float32))
+        self.build_model()
 
-	def build_model(self):
+    def build_model(self):
         self.user_model = User_Model(self.hidden_size,self.bin_num)
+        self.embeddings = nn.ModuleList([nn.Embedding(self.bin_num+1,self.hidden_size) for i in range(4)])
         self.dropout = nn.Dropout(0.2)
-		input_size = 4+self.bin_num+self.hidden_size
-		self.model = nn.Sequential(
-			nn.Linear(input_size,input_size//2),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(input_size//2),
-            nn.Linear(input_size//2,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),nn.BatchNorm1d(self.hidden_size),
-			nn.Linear(self.hidden_size,1)
-		)
-		self.sigmoid = torch.nn.Sigmoid()
+        input_size = self.hidden_size*5+self.bin_num
+        self.model = nn.Sequential(
+            nn.Linear(input_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
+            nn.Linear(self.hidden_size,1)
+        )
+        self.sigmoid = torch.nn.Sigmoid()
 
-	def forward(self, feats):
-		embeds = []
-        embeds.append(torch.cat([torch.tensor(feats[0], dtype=torch.float32),torch.tensor(feats[1], dtype=torch.float32)],1))
+    def forward(self, feats):
+        embeds = []
+        embeds.append(torch.tensor(feats[0], dtype=torch.float32))
+        for i in range(1,5):
+            embeds.append(self.dropout(self.embeddings[i-1](torch.tensor(feats[i], dtype=torch.int64))))
         user_embeds = self.user_model(feats[-1])
         embeds.append(user_embeds)
-		embeds = torch.cat(embeds, 1)
+        embeds = torch.cat(embeds, 1)
 
-		logits = self.model(embeds)
-		preds = self.sigmoid(logits)
-		return logits, preds
+        logits = self.model(embeds)
+        preds = self.sigmoid(logits)
+        return logits, preds
+
+
+if __name__=='__main__':
+    a=Net()
+    print(a.state_dict()['val_score'])

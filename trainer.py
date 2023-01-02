@@ -99,6 +99,7 @@ class My_ClassificationTrainer():
 				auc_best = auc
 				print('Saving model ...')
 				torch.save(model.state_dict(), '%s' % args.global_model_file_path)
+			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
 			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, prox_loss))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
