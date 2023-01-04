@@ -1,0 +1,17 @@
+amlt/
+.amltconfig
+
+__pycache__/
+.vscode/
+.ipynb_checkpoints/
+cache/
+checkpoint/
+log*
+mecab*
+wandb/
+
+*.log
+*_debug.sh
+mlruns/
+
+*.yaml
