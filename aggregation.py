@@ -35,9 +35,9 @@ class My_ClassificationAggregator():
 			self.val_score=avg_params['val_score']
 			self.best_model = avg_params
 
+		print(f'best val score:{self.val_score}')
 		if self.aggregation_num==130:
 			print('load best')
-			print(f'best val score:{self.val_score}')
 			self.set_model_params(self.best_model)
 			return self.best_model
 

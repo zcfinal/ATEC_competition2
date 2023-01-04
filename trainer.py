@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import warnings
 warnings.filterwarnings("ignore")
 import copy
+from sklearn.metrics import roc_auc_score
 def calc_auc(preds, labels): 
 	return roc_auc_score(labels, preds)
 
@@ -98,7 +99,7 @@ class My_ClassificationTrainer():
 			if auc > auc_best:
 				auc_best = auc
 				print('Saving model ...')
-				torch.save(model.state_dict(), '%s' % args.global_model_file_path)
+				#torch.save(model.state_dict(), '%s' % args.global_model_file_path)
 			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
 			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, prox_loss))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))

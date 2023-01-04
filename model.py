@@ -103,7 +103,11 @@ class User_Model(nn.Module):
                                         nn.Embedding(15,self.hidden_size),
                                         nn.Embedding(330,self.hidden_size),
                                         nn.Embedding(15,self.hidden_size),
+                                        nn.Embedding(self.bin_num+1,self.hidden_size),
+                                        nn.Embedding(self.bin_num+1,self.hidden_size),
+                                        nn.Embedding(self.bin_num+1,self.hidden_size),
                                         nn.Embedding(self.bin_num+1,self.hidden_size)])
+        self.trans = nn.Linear(self.bin_num,self.hidden_size)
         self.position_embedding = nn.Embedding(50,self.hidden_size)
         self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
@@ -112,11 +116,12 @@ class User_Model(nn.Module):
     def forward(self,feats):
         #feats : [batch,user_num,4]
         batch_size, user_num, f_num = feats.shape
-        feats = torch.tensor(feats, dtype=torch.int64)
+        feats = torch.tensor(feats)
         feats = feats.view(-1,f_num)
         feats_embedding = []
-        for i in range(5):
-            feats_embedding.append(self.dropout(self.embeddings[i](feats[:,i])))
+        for i in range(8):
+            feats_embedding.append(self.dropout(self.embeddings[i](feats[:,i].long())))
+        feats_embedding.append(self.dropout(self.trans(feats[:,-self.bin_num:])))
         feats_embedding = torch.stack(feats_embedding,1)
         #[batch*user_num,dim]
         feats_embedding = self.user_attention(feats_embedding)
@@ -144,9 +149,9 @@ class Net(nn.Module):
         self.dropout = nn.Dropout(0.2)
         input_size = self.hidden_size*5+self.bin_num
         self.model = nn.Sequential(
-            nn.Linear(input_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.Dropout(0.2),nn.ReLU(),
+            nn.Linear(input_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
+            nn.Linear(self.hidden_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
             nn.Linear(self.hidden_size,1)
         )
         self.sigmoid = torch.nn.Sigmoid()
