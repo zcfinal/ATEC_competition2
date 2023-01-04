@@ -47,11 +47,10 @@ class My_ClassificationTrainer():
 		self.model.load_state_dict(model_parameters)
 	
 	def train(self, train_data, device, args):
-		self.start_state_dict = copy.deepcopy(self.get_model_params())
 		model = self.model
 		model.to(device)
 		model.train()
-		optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+		optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.001)
 		auc_best = 0
 		total_labels = train_data[1]
 		total_feats = train_data[0]
@@ -66,7 +65,7 @@ class My_ClassificationTrainer():
 		valid_labels = total_labels[split_idx:]
 		#data_train = train_data
 
-		for epoch in range(10):
+		for epoch in range(2):
 			minibatch = Minibatch(train_feats, train_labels, 64, shuffle=True)
 			train_losses = []
 			#p=[]
@@ -82,11 +81,7 @@ class My_ClassificationTrainer():
 				#p.extend(preds.detach().numpy().reshape([-1]))
 				criterion = nn.BCEWithLogitsLoss()
 
-				prox_loss = 0
-				for key,para in self.start_state_dict.items():
-					prox_loss += torch.sum((para.detach() - self.get_model_params()[key])**2)
-
-				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + 0.001*prox_loss
+				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
 				loss.backward()
 				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
@@ -101,7 +96,6 @@ class My_ClassificationTrainer():
 				print('Saving model ...')
 				#torch.save(model.state_dict(), '%s' % args.global_model_file_path)
 			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
-			print('[Epoch {}] Prox loss: loss = {:.4f}'.format(epoch+1, prox_loss))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
 			print('[Epoch {}] best: auc = {:.4f}'.format(epoch+1, auc_best))

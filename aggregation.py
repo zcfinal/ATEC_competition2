@@ -13,7 +13,8 @@ class My_ClassificationAggregator():
 
 	def torch_aggregator(self, raw_grad_list, training_num):
 		if not hasattr(self,'optimizer'):
-			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)
+			print('create optimizer')
+			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1, weight_decay=0.001)
 		if hasattr(self,'aggregation_num'):
 			self.aggregation_num+=1
 		else:
