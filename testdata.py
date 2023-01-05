@@ -311,7 +311,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 
 	feat_user = {}
 	feat_user_num = {}
-	user_num = 50
+	user_num = 200
 	for seller_id, trade_datas in trade_records.items():
 		user = []
 		for record in trade_datas:
@@ -382,7 +382,7 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 		else:
 			valid_feat_user_num.append(bin_num)
 
-		user_num = 50
+		user_num = 200
 		if seller_id in feat_user:
 			valid_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:

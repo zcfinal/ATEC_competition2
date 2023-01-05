@@ -108,9 +108,12 @@ class User_Model(nn.Module):
                                         nn.Embedding(self.bin_num+1,self.hidden_size),
                                         nn.Embedding(self.bin_num+1,self.hidden_size)])
         self.trans = nn.Linear(self.bin_num,self.hidden_size)
-        self.position_embedding = nn.Embedding(50,self.hidden_size)
+        self.position_embedding = nn.Embedding(210,self.hidden_size)
         self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
-        self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
+        self.shop_attentions = nn.ModuleList([AttentionPooling(self.hidden_size,self.hidden_size,0.5),
+                                            AttentionPooling(self.hidden_size,self.hidden_size,0.5),
+                                            AttentionPooling(self.hidden_size,self.hidden_size,0.5)])
+        self.agg_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self,feats):
@@ -127,11 +130,27 @@ class User_Model(nn.Module):
         feats_embedding = self.user_attention(feats_embedding)
         feats_embedding = feats_embedding.view(batch_size,user_num,-1)
         feats_embedding = feats_embedding + self.dropout(self.position_embedding(torch.tensor([i for i in range(user_num)], dtype=torch.int64).expand(batch_size,user_num)))
-        feats_embedding = self.shop_attention(feats_embedding)
+        multi_embedding = []
+        for attn in self.shop_attentions:
+            multi_embedding.append(attn(feats_embedding))
+        multi_embedding = torch.stack(multi_embedding,1)
+        feats_embedding = self.agg_attention(multi_embedding)
 
         return feats_embedding
         
-        
+
+class short_cut(nn.Module):
+    def __init__(self, hidden_size=16, num_layers=2, lr=0.001):
+        super(short_cut, self).__init__()
+        self.li = nn.Linear(hidden_size,hidden_size)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.2)
+    
+    def forward(self,x):
+        new_x = self.li(x)
+        new_x = self.relu(new_x)
+        new_x = self.dropout(new_x)
+        return x + new_x
         
 
 class Net(nn.Module):
@@ -146,24 +165,31 @@ class Net(nn.Module):
     def build_model(self):
         self.user_model = User_Model(self.hidden_size,self.bin_num)
         self.embeddings = nn.ModuleList([nn.Embedding(self.bin_num+1,self.hidden_size) for i in range(4)])
+        self.feature_agg = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
-        input_size = self.hidden_size*5+self.bin_num
+        self.trans = nn.Linear(self.bin_num,self.hidden_size)
+        input_size = self.hidden_size*2
         self.model = nn.Sequential(
             nn.Linear(input_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
-            nn.Linear(self.hidden_size,self.hidden_size),nn.ReLU(),nn.Dropout(0.2),
+            short_cut(),
+            short_cut(),
+            short_cut(),
             nn.Linear(self.hidden_size,1)
         )
         self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, feats):
         embeds = []
-        embeds.append(torch.tensor(feats[0], dtype=torch.float32))
+        embeds.append(self.dropout(self.trans(torch.tensor(feats[0], dtype=torch.float32))))
         for i in range(1,5):
             embeds.append(self.dropout(self.embeddings[i-1](torch.tensor(feats[i], dtype=torch.int64))))
+
+        embeds = torch.stack(embeds, 1)
+        embeds = self.feature_agg(embeds)
         user_embeds = self.user_model(feats[-1])
-        embeds.append(user_embeds)
-        embeds = torch.cat(embeds, 1)
+
+        embeds = torch.cat([embeds,user_embeds],-1)
+
 
         logits = self.model(embeds)
         preds = self.sigmoid(logits)
