@@ -110,6 +110,7 @@ class User_Model(nn.Module):
         self.trans = nn.Linear(self.bin_num,self.hidden_size)
         self.position_embedding = nn.Embedding(210,self.hidden_size)
         self.user_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
+        self.user_transformer = MultiHeadAttention(self.hidden_size,4,4,4)
         self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
 
@@ -128,7 +129,7 @@ class User_Model(nn.Module):
         feats_embedding = self.user_attention(feats_embedding)
         feats_embedding = feats_embedding.view(batch_size,user_num,-1)
         feats_embedding = feats_embedding + self.dropout(self.position_embedding(torch.tensor([i for i in range(user_num)], dtype=torch.int64).expand(batch_size,user_num)))
-
+        feats_embedding = self.user_transformer(feats_embedding,mask)
         feats_embedding = self.shop_attention(feats_embedding,mask)
 
         return feats_embedding
