@@ -3,6 +3,7 @@ import os
 from torch import nn
 import logging
 import numpy as np
+from torch.autograd import Variable
 import torch.nn.functional as F
 
 import warnings
@@ -11,6 +12,48 @@ import copy
 from sklearn.metrics import roc_auc_score
 def calc_auc(preds, labels): 
 	return roc_auc_score(labels, preds)
+
+class FocalLoss(nn.Module):
+
+	def __init__(self, class_num=2, alpha=None, gamma=2, size_average=True):
+		super(FocalLoss, self).__init__()
+		self.alpha = Variable(torch.tensor([1,1.3]))
+		self.gamma = gamma
+		self.class_num = class_num
+		self.size_average = size_average
+
+	def forward(self, inputs, targets):
+		N = inputs.size(0)
+		C=2
+		P = torch.stack([1-F.sigmoid(inputs),F.sigmoid(inputs)],1)
+
+		class_mask = inputs.data.new(N, C).fill_(0)
+		class_mask = Variable(class_mask)
+		ids = targets.view(-1, 1).long()
+		class_mask.scatter_(1, ids.data, 1.)
+		#print(class_mask)
+
+
+		if inputs.is_cuda and not self.alpha.is_cuda:
+			self.alpha = self.alpha.cuda()
+		alpha = self.alpha[ids.data.view(-1)]
+
+		probs = (P*class_mask).sum(1).view(-1,1)
+
+		log_p = probs.log()
+		#print('probs size= {}'.format(probs.size()))
+		#print(probs)
+
+		batch_loss = -alpha*(torch.pow((1-probs), self.gamma))*log_p 
+		#print('-----bacth_loss------')
+		#print(batch_loss)
+
+
+		if self.size_average:
+			loss = batch_loss.mean()
+		else:
+			loss = batch_loss.sum()
+		return loss
 
 class Minibatch:
 	def __init__(self, train_feats, train_labels, batch_size, shuffle=True):
@@ -46,18 +89,7 @@ class My_ClassificationTrainer():
 	def set_model_params(self, model_parameters):
 		self.model.load_state_dict(model_parameters)
 	
-	def update_ema_variables(self, model, ema_model, alpha):
-		# Use the true average until the exponential average is more correct
-		for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-			ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
-
-
 	def train(self, train_data, device, args):
-		if not hasattr(self,'ema_model'):
-			self.ema_model = copy.deepcopy(self.model)
-			print('create ema model')
-		
-
 		model = self.model
 		model.to(device)
 		model.train()
@@ -79,27 +111,24 @@ class My_ClassificationTrainer():
 		for epoch in range(2):
 			minibatch = Minibatch(train_feats, train_labels, 64, shuffle=True)
 			train_losses = []
-			ema_losses = []
+			#p=[]
+			#l=[]
+			#train_data=data_train
+			#train_data.cur_idx=0
 			model.train()
 			while minibatch.has_next():
 				feats, label = minibatch.next_batch()
 				#l.extend(label)
 				model.zero_grad()
 				logits, preds = model(feats)
-				ema_logits, ema_preds = self.ema_model(feats)
+				#p.extend(preds.detach().numpy().reshape([-1]))
+				criterion = FocalLoss()
 
-				consis_loss = torch.mean((ema_logits.detach()-logits)**2)
-				ema_losses.append(consis_loss.detach().numpy())
-				criterion = nn.BCEWithLogitsLoss()
-
-				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + consis_loss
+				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
 				loss.backward()
-				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+				#torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
 				train_losses.append(loss.detach().numpy())
-
-				self.update_ema_variables(model,self.ema_model,0.90)
-
 			model.eval()
 			with torch.no_grad():
 				l, valid_preds = model(valid_feats)
@@ -111,6 +140,5 @@ class My_ClassificationTrainer():
 				#torch.save(model.state_dict(), '%s' % args.global_model_file_path)
 			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
-			print('[Epoch {}] EMA: loss = {:.4f}'.format(epoch+1, np.mean(ema_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
 			print('[Epoch {}] best: auc = {:.4f}'.format(epoch+1, auc_best))
