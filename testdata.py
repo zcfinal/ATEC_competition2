@@ -310,6 +310,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	#user
 
 	feat_user = {}
+	feat_user_mask = {}
 	feat_user_num = {}
 	user_num = 200
 	for seller_id, trade_datas in trade_records.items():
@@ -319,9 +320,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		user_count = Counter(user)
 		user_most = user_count.most_common(user_num)
 		user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
+		mask = [1]*len(user) + [0]*(user_num-len(user))
 		user = user + [0]*(user_num-len(user))
+		
 		feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
+		feat_user_mask[seller_id] = mask
 
 	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
 	bin_est.fit(np.reshape(list(feat_user_num.values()), [-1,1]))
@@ -334,10 +338,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 				'feat_return_num':feat_return_num,
 				'feat_user_num':feat_user_num,
 				'feat_user':feat_user,
+				'feat_user_mask':feat_user_mask,
 				'user_feat_batch':user_feat_batch
 				}
 
 	return ret_dict
+
 
 
 
@@ -350,12 +356,14 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 	feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
 	feat_return_num =ret_dict['feat_return_num']
 	feat_user_num=ret_dict['feat_user_num']
+	feat_user_mask=ret_dict['feat_user_mask']
 	feat_user=ret_dict['feat_user']
 	user_feat_batch=ret_dict['user_feat_batch']
 	# 这是只是测试集的特征处理部分，不含有label
 	# a dataset samples
 	valid_feat_user_num = []
 	valid_feat_user = []
+	valid_feat_user_mask = []
 	valid_feat_interval_time = []
 	valid_feat_trade_num = []
 	valid_feat_avg_trade_amount = []
@@ -383,6 +391,12 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 			valid_feat_user_num.append(bin_num)
 
 		user_num = 200
+
+		if seller_id in feat_user_mask:
+			valid_feat_user_mask.append(feat_user_mask[seller_id])
+		else:
+			valid_feat_user_mask.append([0]*user_num)
+
 		if seller_id in feat_user:
 			valid_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:
@@ -417,6 +431,7 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 		, np.array(valid_feat_return_num,dtype=np.float32)
 		, np.array(valid_feat_user_num,dtype=np.float32)
 		, np.array(valid_feat_user,dtype=np.float32)
+		, np.array(valid_feat_user_mask,dtype=np.float32)
 	]
 
 	return valid_feats

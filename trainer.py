@@ -79,12 +79,9 @@ class My_ClassificationTrainer():
 				model.zero_grad()
 				logits, preds = model(feats)
 				#p.extend(preds.detach().numpy().reshape([-1]))
-				criterion = nn.BCEWithLogitsLoss(reduction='none')
+				criterion = nn.BCEWithLogitsLoss()
 
 				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
-
-				mask = 1.2*(torch.tensor(label, dtype=torch.float32)==1).float() +(torch.tensor(label, dtype=torch.float32)==0).float()
-				loss = torch.mean(mask*loss)
 				loss.backward()
 				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()

@@ -113,10 +113,11 @@ class User_Model(nn.Module):
         self.shop_attention = AttentionPooling(self.hidden_size,self.hidden_size,0.5)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self,feats):
+    def forward(self,feats,mask):
         #feats : [batch,user_num,4]
         batch_size, user_num, f_num = feats.shape
         feats = torch.tensor(feats)
+        mask = torch.tensor(mask)
         feats = feats.view(-1,f_num)
         feats_embedding = []
         for i in range(8):
@@ -127,7 +128,8 @@ class User_Model(nn.Module):
         feats_embedding = self.user_attention(feats_embedding)
         feats_embedding = feats_embedding.view(batch_size,user_num,-1)
         feats_embedding = feats_embedding + self.dropout(self.position_embedding(torch.tensor([i for i in range(user_num)], dtype=torch.int64).expand(batch_size,user_num)))
-        feats_embedding = self.shop_attention(feats_embedding)
+
+        feats_embedding = self.shop_attention(feats_embedding,mask)
 
         return feats_embedding
         
@@ -161,7 +163,7 @@ class Net(nn.Module):
         embeds.append(torch.tensor(feats[0], dtype=torch.float32))
         for i in range(1,5):
             embeds.append(self.dropout(self.embeddings[i-1](torch.tensor(feats[i], dtype=torch.int64))))
-        user_embeds = self.user_model(feats[-1])
+        user_embeds = self.user_model(feats[-2],feats[-1])
         embeds.append(user_embeds)
         embeds = torch.cat(embeds, 1)
 

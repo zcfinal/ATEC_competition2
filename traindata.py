@@ -23,12 +23,14 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 	feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
 	feat_return_num =ret_dict['feat_return_num']
 	feat_user_num=ret_dict['feat_user_num']
+	feat_user_mask=ret_dict['feat_user_mask']
 	feat_user=ret_dict['feat_user']
 	user_feat_batch=ret_dict['user_feat_batch']
 
 	c_path_train_label = c_path_train_label
 	train_feat_user_num = []
 	train_feat_user = []
+	train_feat_user_mask = []
 	train_feat_interval_time = []
 	train_feat_trade_num = []
 	train_feat_avg_trade_amount = []
@@ -63,6 +65,12 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 			train_feat_user_num.append(bin_num)
 
 		user_num = 200
+
+		if seller_id in feat_user_mask:
+			train_feat_user_mask.append(feat_user_mask[seller_id])
+		else:
+			train_feat_user_mask.append([0]*user_num)
+
 		if seller_id in feat_user:
 			train_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:
@@ -98,6 +106,7 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 		, np.array(train_feat_return_num,dtype=np.float32)[indices]
 		, np.array(train_feat_user_num,dtype=np.float32)[indices]
 		, np.array(train_feat_user,dtype=np.float32)[indices]
+		, np.array(train_feat_user_mask,dtype=np.float32)[indices]
 		]
 	train_labels = np.array(train_labels)[indices]
 
@@ -411,6 +420,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	#user
 
 	feat_user = {}
+	feat_user_mask = {}
 	feat_user_num = {}
 	user_num = 200
 	for seller_id, trade_datas in trade_records.items():
@@ -420,9 +430,12 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 		user_count = Counter(user)
 		user_most = user_count.most_common(user_num)
 		user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
+		mask = [1]*len(user) + [0]*(user_num-len(user))
 		user = user + [0]*(user_num-len(user))
+		
 		feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
+		feat_user_mask[seller_id] = mask
 
 	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
 	bin_est.fit(np.reshape(list(feat_user_num.values()), [-1,1]))
@@ -435,6 +448,7 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 				'feat_return_num':feat_return_num,
 				'feat_user_num':feat_user_num,
 				'feat_user':feat_user,
+				'feat_user_mask':feat_user_mask,
 				'user_feat_batch':user_feat_batch
 				}
 
