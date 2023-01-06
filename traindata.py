@@ -100,6 +100,13 @@ def gen_train_data(c_path_buyer_features, c_path_edge_features, c_path_train_lab
 		, np.array(train_feat_user,dtype=np.float32)[indices]
 		]
 	train_labels = np.array(train_labels)[indices]
+
+	print('0 nun:')
+	print(np.sum(train_labels==0))
+	print('1 num:')
+	print(np.sum(train_labels==1))
+	import pdb
+	pdb.set_trace()
 	train_data = []
 	train_data.append(train_feats)
 	train_data.append(train_labels)

@@ -46,7 +46,18 @@ class My_ClassificationTrainer():
 	def set_model_params(self, model_parameters):
 		self.model.load_state_dict(model_parameters)
 	
+	def update_ema_variables(self, model, ema_model, alpha):
+		# Use the true average until the exponential average is more correct
+		for ema_param, param in zip(ema_model.parameters(), model.parameters()):
+			ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
+
+
 	def train(self, train_data, device, args):
+		if not hasattr(self,'ema_model'):
+			self.ema_model = copy.deepcopy(self.model)
+			print('create ema model')
+		
+
 		model = self.model
 		model.to(device)
 		model.train()
@@ -68,24 +79,27 @@ class My_ClassificationTrainer():
 		for epoch in range(2):
 			minibatch = Minibatch(train_feats, train_labels, 64, shuffle=True)
 			train_losses = []
-			#p=[]
-			#l=[]
-			#train_data=data_train
-			#train_data.cur_idx=0
+			ema_losses = []
 			model.train()
 			while minibatch.has_next():
 				feats, label = minibatch.next_batch()
 				#l.extend(label)
 				model.zero_grad()
 				logits, preds = model(feats)
-				#p.extend(preds.detach().numpy().reshape([-1]))
+				ema_logits, ema_preds = self.ema_model(feats)
+
+				consis_loss = torch.mean((ema_logits.detach()-logits)**2)
+				ema_losses.append(consis_loss.detach().numpy())
 				criterion = nn.BCEWithLogitsLoss()
 
-				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
+				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32)) + consis_loss
 				loss.backward()
 				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
 				train_losses.append(loss.detach().numpy())
+
+				self.update_ema_variables(model,self.ema_model,0.90)
+
 			model.eval()
 			with torch.no_grad():
 				l, valid_preds = model(valid_feats)
@@ -97,5 +111,6 @@ class My_ClassificationTrainer():
 				#torch.save(model.state_dict(), '%s' % args.global_model_file_path)
 			model.val_score = torch.nn.Parameter(torch.tensor(auc,dtype=torch.float32))
 			print('[Epoch {}] TRAIN: loss = {:.4f}'.format(epoch+1, np.mean(train_losses)))
+			print('[Epoch {}] EMA: loss = {:.4f}'.format(epoch+1, np.mean(ema_losses)))
 			print('[Epoch {}] VALIDATION: auc = {:.4f}'.format(epoch+1, auc))
 			print('[Epoch {}] best: auc = {:.4f}'.format(epoch+1, auc_best))
