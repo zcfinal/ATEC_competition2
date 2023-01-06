@@ -3,7 +3,6 @@ import os
 from torch import nn
 import logging
 import numpy as np
-from torch.autograd import Variable
 import torch.nn.functional as F
 
 import warnings
@@ -12,48 +11,6 @@ import copy
 from sklearn.metrics import roc_auc_score
 def calc_auc(preds, labels): 
 	return roc_auc_score(labels, preds)
-
-class FocalLoss(nn.Module):
-
-	def __init__(self, class_num=2, alpha=None, gamma=2, size_average=True):
-		super(FocalLoss, self).__init__()
-		self.alpha = Variable(torch.tensor([1,1.3]))
-		self.gamma = gamma
-		self.class_num = class_num
-		self.size_average = size_average
-
-	def forward(self, inputs, targets):
-		N = inputs.size(0)
-		C=2
-		P = torch.stack([1-F.sigmoid(inputs),F.sigmoid(inputs)],1)
-
-		class_mask = inputs.data.new(N, C).fill_(0)
-		class_mask = Variable(class_mask)
-		ids = targets.view(-1, 1).long()
-		class_mask.scatter_(1, ids.data, 1.)
-		#print(class_mask)
-
-
-		if inputs.is_cuda and not self.alpha.is_cuda:
-			self.alpha = self.alpha.cuda()
-		alpha = self.alpha[ids.data.view(-1)]
-
-		probs = (P*class_mask).sum(1).view(-1,1)
-
-		log_p = probs.log()
-		#print('probs size= {}'.format(probs.size()))
-		#print(probs)
-
-		batch_loss = -alpha*(torch.pow((1-probs), self.gamma))*log_p 
-		#print('-----bacth_loss------')
-		#print(batch_loss)
-
-
-		if self.size_average:
-			loss = batch_loss.mean()
-		else:
-			loss = batch_loss.sum()
-		return loss
 
 class Minibatch:
 	def __init__(self, train_feats, train_labels, batch_size, shuffle=True):
@@ -122,11 +79,14 @@ class My_ClassificationTrainer():
 				model.zero_grad()
 				logits, preds = model(feats)
 				#p.extend(preds.detach().numpy().reshape([-1]))
-				criterion = FocalLoss()
+				criterion = nn.BCEWithLogitsLoss(reduction='none')
 
 				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
+
+				mask = 1.2*(torch.tensor(label, dtype=torch.float32)==1).float() +(torch.tensor(label, dtype=torch.float32)==0).float()
+				loss = torch.mean(mask*loss)
 				loss.backward()
-				#torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+				torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 				optimizer.step()
 				train_losses.append(loss.detach().numpy())
 			model.eval()
