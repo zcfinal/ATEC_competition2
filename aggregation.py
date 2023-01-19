@@ -14,7 +14,7 @@ class My_ClassificationAggregator():
 	def torch_aggregator(self, raw_grad_list, training_num):
 		if not hasattr(self,'optimizer'):
 			print('create optimizer')
-			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1, weight_decay=0.001)
+			self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.05, weight_decay=0.001)
 		if hasattr(self,'aggregation_num'):
 			self.aggregation_num+=1
 		else:
@@ -49,7 +49,7 @@ class My_ClassificationAggregator():
 			self.best_model = avg_params
 
 		print(f'best val score:{self.val_score}')
-		if self.aggregation_num==130:
+		if self.aggregation_num==200:
 			print('load best')
 			self.set_model_params(self.best_model)
 			return self.best_model

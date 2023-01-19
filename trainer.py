@@ -12,6 +12,29 @@ from sklearn.metrics import roc_auc_score
 def calc_auc(preds, labels): 
 	return roc_auc_score(labels, preds)
 
+class SmoothLoss(nn.Module):
+
+	def __init__(self, size_average=True):
+		super(SmoothLoss, self).__init__()
+		self.target = torch.tensor([[0.90,0.1],[0,1]])
+		self.size_average = size_average
+
+	def forward(self, inputs, targets):
+		N = inputs.size(0)
+		C=2
+		P = torch.stack([1-F.sigmoid(inputs),F.sigmoid(inputs)],1)
+
+		ids = targets.view(-1, 1).long()
+		target = self.target[ids].squeeze(1)
+
+		batch_loss = torch.sum(-target*P.log(),-1)
+
+		if self.size_average:
+			loss = batch_loss.mean()
+		else:
+			loss = batch_loss.sum()
+		return loss
+
 class Minibatch:
 	def __init__(self, train_feats, train_labels, batch_size, shuffle=True):
 		self.train_feats = train_feats
@@ -79,7 +102,7 @@ class My_ClassificationTrainer():
 				model.zero_grad()
 				logits, preds = model(feats)
 				#p.extend(preds.detach().numpy().reshape([-1]))
-				criterion = nn.BCEWithLogitsLoss()
+				criterion = SmoothLoss()
 
 				loss = criterion(logits.view(-1), torch.tensor(label, dtype=torch.float32))
 				loss.backward()

@@ -7,12 +7,13 @@ from sklearn.preprocessing import KBinsDiscretizer
 
 import warnings
 warnings.filterwarnings("ignore")
+
 def train_feat_process(path_buyer_features, path_edge_features, path_train_label): # 开放给用户
 	
 	"""
 	process trade buyer features
 	"""
-	bin_num=10
+	bin_num=15
 	user_column = {'buyer_id':0,
 					'gender':1,
 					'age':2,
@@ -208,6 +209,36 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 				histgram_feat[i] = counter_res[i] / total_count
 		feat_user_interval_time[buyer_id] = histgram_feat
 	
+	feat_user_return_interval_time = {}
+	user_return_interval_time_vals = []
+	for buyer_id, trade_datas in user_records.items():
+		buyer_id = buyer_feat_set[user_column['buyer_id']][buyer_id]
+		for data in trade_datas:
+			suc_return_date = data['suc_return_date']
+			trade_create_date = data['trade_create_date']
+			if suc_return_date != '' and trade_create_date != '':
+				if buyer_id not in feat_user_return_interval_time:
+					feat_user_return_interval_time[buyer_id] = []
+				trade_create_date = int(trade_create_date)
+				suc_return_date = int(suc_return_date)
+				interval_time = suc_return_date - trade_create_date
+				feat_user_return_interval_time[buyer_id].append([interval_time])
+				user_return_interval_time_vals.append([interval_time])
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(user_return_interval_time_vals)
+	for buyer_id, vals in feat_user_return_interval_time.items():
+		bin_res = bin_est.transform(vals)
+		counter_res = Counter(np.reshape(bin_res, [-1]))
+		total_count = float(np.sum(list(counter_res.values())))
+		histgram_feat = np.zeros([bin_num], dtype=np.float32)
+		for i in range(bin_num):
+			if i in counter_res:
+				if total_count==0:
+					histgram_feat[i] = 0
+				else:
+					histgram_feat[i] = counter_res[i] / total_count
+		feat_user_return_interval_time[buyer_id] = histgram_feat
+	
 	feature_group = [
 		feat_buy_num,
 		feat_user_avg_trade_amount,
@@ -222,11 +253,17 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 			else:
 				user_feat_batch[uid].append(bin_num)
 	
+	feat_time=[
+		feat_user_interval_time,
+		feat_user_return_interval_time
+	]
+
 	for uid in user_feat_batch:
-		if uid in feat_user_interval_time:
-			user_feat_batch[uid].extend(feat_user_interval_time[uid])
-		else:
-			user_feat_batch[uid].extend([0]*bin_num)
+		for feat in feat_time:
+			if uid in feat:
+				user_feat_batch[uid].extend(feat[uid])
+			else:
+				user_feat_batch[uid].extend([0]*bin_num)
 	
 
 	# interval between the time of goods delivery and trade created time
@@ -255,6 +292,36 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 			if i in counter_res:
 				histgram_feat[i] = counter_res[i] / total_count
 		feat_interval_time[seller_id] = histgram_feat
+	
+	# interval between the time of goods delivery and trade return time
+	feat_return_interval_time = {}
+	return_interval_time_vals = []
+	for seller_id, trade_datas in trade_records.items():
+		for data in trade_datas:
+			suc_return_date = data['suc_return_date']
+			trade_create_date = data['trade_create_date']
+			if suc_return_date != '' and trade_create_date != '':
+				if seller_id not in feat_return_interval_time:
+					feat_return_interval_time[seller_id] = []
+				trade_create_date = int(trade_create_date)
+				suc_return_date = int(suc_return_date)
+				interval_time = suc_return_date - trade_create_date
+				feat_return_interval_time[seller_id].append([interval_time])
+				return_interval_time_vals.append([interval_time])
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(return_interval_time_vals)
+	for seller_id, vals in feat_return_interval_time.items():
+		bin_res = bin_est.transform(vals)
+		counter_res = Counter(np.reshape(bin_res, [-1]))
+		total_count = float(np.sum(list(counter_res.values())))
+		histgram_feat = np.zeros([bin_num], dtype=np.float32)
+		for i in range(bin_num):
+			if i in counter_res:
+				if total_count==0:
+					histgram_feat[i] = 0
+				else:
+					histgram_feat[i] = counter_res[i] / total_count
+		feat_return_interval_time[seller_id] = histgram_feat
 
 	# total trade number
 	feat_trade_num = {}
@@ -288,6 +355,29 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 	bin_est.fit(avg_trade_amount_vals)
 	for seller_id, val in feat_avg_trade_amount.items():
 		feat_avg_trade_amount[seller_id] = bin_est.transform([[val]])[0][0]
+	
+	feat_return_amount = {}
+	feat_avg_return_amount = {}
+	avg_return_amount_vals = []
+	for seller_id, trade_datas in trade_records.items():
+		for data in trade_datas:
+			trade_return_amt = data['trade_return_amt']
+			if trade_return_amt != '':
+				if seller_id not in feat_return_amount:
+					feat_return_amount[seller_id] = []
+				trade_return_amt = float(trade_return_amt)
+				feat_return_amount[seller_id].append([trade_return_amt])
+	for seller_id, vals in feat_return_amount.items():
+		if seller_id not in feat_avg_return_amount:
+			feat_avg_return_amount[seller_id] = []
+		avg_val = np.mean(vals)
+		feat_avg_return_amount[seller_id] = avg_val
+		avg_return_amount_vals.append([avg_val])
+
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(avg_return_amount_vals)
+	for seller_id, val in feat_avg_return_amount.items():
+		feat_avg_return_amount[seller_id] = bin_est.transform([[val]])[0][0]
 
 	# number of return
 	feat_return_num = {}
@@ -309,35 +399,129 @@ def train_feat_process(path_buyer_features, path_edge_features, path_train_label
 
 	#user
 
+	all_buy_num = []
+	all_buy_amount = []
+	all_return_amount = []
 	feat_user = {}
 	feat_user_num = {}
-	user_num = 50
+	feat_user_buy_num={}
+	feat_user_buy_amount={}
+	feat_user_return_amount={}
+	user_num = 200
 	for seller_id, trade_datas in trade_records.items():
 		user = []
+		user_buy_amount = {}
+		user_return_amount = {}
 		for record in trade_datas:
 			user.append(record['buyer_id'])
+			buyer_id = buyer_feat_set[user_column['buyer_id']][record['buyer_id']]
+			trade_total_amt = record['trade_total_amt']
+			trade_return_amt = record['trade_return_amt']
+			if trade_total_amt != '':
+				if buyer_id not in user_buy_amount:
+					user_buy_amount[buyer_id] = [float(trade_total_amt)]
+				else:
+					user_buy_amount[buyer_id].append(float(trade_total_amt))
+			if trade_return_amt != '':                              
+				if buyer_id not in user_return_amount:
+					user_return_amount[buyer_id] = [float(trade_return_amt)]
+				else:
+					user_return_amount[buyer_id].append(float(trade_return_amt))
+		for key in user_buy_amount:
+			user_buy_amount[key] = np.mean(user_buy_amount[key])
+		for key in user_return_amount:
+			user_return_amount[key] = np.mean(user_return_amount[key])
+
+		all_buy_amount.extend(list(user_buy_amount.values()))
+		all_return_amount.extend(list(user_return_amount.values()))
 		user_count = Counter(user)
 		user_most = user_count.most_common(user_num)
 		user = [buyer_feat_set[user_column['buyer_id']][uid[0]] for uid in user_most]
-		user = user + [0]*(user_num-len(user))
+		padding_num = (user_num-len(user))
+		user = user + [0]*padding_num
+
+		user_buy_num = [uid[1] for uid in user_most] 
+		all_buy_num.extend(user_buy_num)
+
+		feat_user_buy_num[seller_id] = user_buy_num
 		feat_user_num[seller_id] = len(user_count)
 		feat_user[seller_id] = user
+		user_buy_amount = [user_buy_amount[buyer_feat_set[user_column['buyer_id']][uid[0]]] for uid in user_most]
+		user_return_amount = [user_return_amount[buyer_feat_set[user_column['buyer_id']][uid[0]]] for uid in user_most]
+		feat_user_buy_amount[seller_id] = user_buy_amount
+		feat_user_return_amount[seller_id] = user_return_amount
+	
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(np.reshape(all_buy_num, [-1,1]))
+	for seller_id,val in feat_user_buy_num.items():
+		temp = []
+		for v in val:
+			temp.append(bin_est.transform([[v]])[0][0])
+		feat_user_buy_num[seller_id] = temp
+	
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(np.reshape(all_buy_amount, [-1,1]))
+	for seller_id,val in feat_user_buy_amount.items():
+		temp = []
+		for v in val:
+			temp.append(bin_est.transform([[v]])[0][0])
+		feat_user_buy_amount[seller_id] = temp
+	
+	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
+	bin_est.fit(np.reshape(all_return_amount, [-1,1]))
+	for seller_id,val in feat_user_return_amount.items():
+		temp = []
+		for v in val:
+			temp.append(bin_est.transform([[v]])[0][0])
+		feat_user_return_amount[seller_id] = temp
 
 	bin_est = KBinsDiscretizer(n_bins=bin_num, encode='ordinal', strategy='quantile')
 	bin_est.fit(np.reshape(list(feat_user_num.values()), [-1,1]))
 	for seller_id, val in feat_user_num.items():
 		feat_user_num[seller_id] = bin_est.transform([[val]])[0][0]
+	
+	seller_feat={}
+	feat_group = [
+				feat_trade_num,
+				feat_avg_trade_amount,
+				feat_return_num,
+				feat_user_num,
+				feat_avg_return_amount
+	]
 
-	ret_dict = {'feat_interval_time':feat_interval_time,
-				'feat_trade_num':feat_trade_num,
-				'feat_avg_trade_amount':feat_avg_trade_amount,
-				'feat_return_num':feat_return_num,
-				'feat_user_num':feat_user_num,
+	for seller_id in seller_ids:
+		seller_feat[seller_id]=[]
+		for feat in feat_group:
+			if seller_id in feat:
+				seller_feat[seller_id].append(feat[seller_id])
+			else:
+				seller_feat[seller_id].append(bin_num)
+	
+	feat_group = [
+		feat_interval_time,
+		feat_return_interval_time
+	]
+
+	feat_time = {}
+	for seller_id in seller_ids:
+		feat_time[seller_id]=[]
+		for feat in feat_group:
+			if seller_id in feat:
+				feat_time[seller_id].extend(feat[seller_id])
+			else:
+				feat_time[seller_id].extend([0]*bin_num)
+
+	ret_dict = {'feat_interval_time':feat_time,
+				'seller_feat':seller_feat,
 				'feat_user':feat_user,
-				'user_feat_batch':user_feat_batch
+				'feat_user_buy_num':feat_user_buy_num,
+				'feat_user_buy_amount':feat_user_buy_amount,
+				'user_feat_batch':user_feat_batch,
+				'feat_user_return_amount':feat_user_return_amount
 				}
 
 	return ret_dict
+
 
 
 
@@ -346,24 +530,27 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 	# 我们的示例是简化版：直接获取的训练集预处理特征提前的特征
 	ret_dict = train_feat_process(s_path_buyer_features, s_path_edge_features, s_path_train_label)
 	feat_interval_time=ret_dict['feat_interval_time']
-	feat_trade_num=ret_dict['feat_trade_num']
-	feat_avg_trade_amount=ret_dict['feat_avg_trade_amount']
-	feat_return_num =ret_dict['feat_return_num']
-	feat_user_num=ret_dict['feat_user_num']
+	feat_user_buy_amount=ret_dict['feat_user_buy_amount']
+	seller_feat=ret_dict['seller_feat']
 	feat_user=ret_dict['feat_user']
 	user_feat_batch=ret_dict['user_feat_batch']
+	feat_user_buy_num=ret_dict['feat_user_buy_num']
+	feat_user_return_amount=ret_dict['feat_user_return_amount']
 	# 这是只是测试集的特征处理部分，不含有label
 	# a dataset samples
-	valid_feat_user_num = []
+	valid_feat_seller = []
 	valid_feat_user = []
+	valid_feat_user_buy_num=[]
+	valid_feat_user_buy_amount = []
 	valid_feat_interval_time = []
-	valid_feat_trade_num = []
-	valid_feat_avg_trade_amount = []
-	valid_feat_return_num = []
-	bin_num=10
+	valid_feat_user_return_amount=[]
+	bin_num=15
+	num_time_feat=2
+	seller_feat_num = len(next(iter(seller_feat.values())))
+
 
 	user_feature_matrix = np.zeros((len(user_feat_batch)+1,len(user_feat_batch[1])), dtype=np.int32)
-	user_feature_matrix[:,4:-bin_num]=bin_num
+	user_feature_matrix[:,4:-bin_num*num_time_feat]=bin_num
 	for uid,feature in user_feat_batch.items():
 		user_feature_matrix[uid]=np.array(feature)
 
@@ -377,46 +564,46 @@ def gen_test_data(s_path_buyer_features, s_path_edge_features, s_path_train_labe
 		parts = line.rstrip().split()
 		seller_id = int(parts[0])
 
-		if seller_id in feat_user_num:
-			valid_feat_user_num.append(feat_user_num[seller_id])
+		user_num = 200
+		if seller_id in feat_user_return_amount:
+			valid_feat_user_return_amount.append(feat_user_return_amount[seller_id]+[bin_num]*(user_num-len(feat_user_return_amount[seller_id])))
 		else:
-			valid_feat_user_num.append(bin_num)
+			valid_feat_user_return_amount.append([bin_num]*user_num)
 
-		user_num = 50
+		if seller_id in feat_user_buy_amount:
+			valid_feat_user_buy_amount.append(feat_user_buy_amount[seller_id]+[bin_num]*(user_num-len(feat_user_buy_amount[seller_id])))
+		else:
+			valid_feat_user_buy_amount.append([bin_num]*user_num)
+
+		if seller_id in feat_user_buy_num:
+			valid_feat_user_buy_num.append(feat_user_buy_num[seller_id]+[bin_num]*(user_num-len(feat_user_buy_num[seller_id])))
+		else:
+			valid_feat_user_buy_num.append([bin_num]*user_num)
+
 		if seller_id in feat_user:
 			valid_feat_user.append(user_feature_matrix[feat_user[seller_id]])
 		else:
 			valid_feat_user.append(user_feature_matrix[[0]*user_num])
 		
-
-
 		if seller_id in feat_interval_time:
 			valid_feat_interval_time.append(feat_interval_time[seller_id])
 		else:
-			valid_feat_interval_time.append(np.zeros([bin_num], dtype=np.float32))
-
-		if seller_id in feat_trade_num:
-			valid_feat_trade_num.append(feat_trade_num[seller_id])
+			valid_feat_interval_time.append(np.zeros([bin_num*num_time_feat], dtype=np.float32))
+		
+		if seller_id in seller_feat:
+			valid_feat_seller.append(seller_feat[seller_id])
 		else:
-			valid_feat_trade_num.append(bin_num)
+			valid_feat_seller.append([bin_num]*seller_feat_num)
 
-		if seller_id in feat_avg_trade_amount:
-			valid_feat_avg_trade_amount.append(feat_avg_trade_amount[seller_id])
-		else:
-			valid_feat_avg_trade_amount.append(bin_num)
-
-		if seller_id in feat_return_num:
-			valid_feat_return_num.append(feat_return_num[seller_id])
-		else:
-			valid_feat_return_num.append(bin_num)
+		
 
 	valid_feats = [
 		np.array(valid_feat_interval_time,dtype=np.float32)
-		, np.array(valid_feat_trade_num,dtype=np.float32)
-		, np.array(valid_feat_avg_trade_amount,dtype=np.float32)
-		, np.array(valid_feat_return_num,dtype=np.float32)
-		, np.array(valid_feat_user_num,dtype=np.float32)
+		, np.array(valid_feat_seller,dtype=np.float32)
 		, np.array(valid_feat_user,dtype=np.float32)
+		, np.array(valid_feat_user_buy_num,dtype=np.float32)
+		, np.array(valid_feat_user_buy_amount,dtype=np.float32)
+		, np.array(valid_feat_user_return_amount,dtype=np.float32)
 	]
 
 	return valid_feats
